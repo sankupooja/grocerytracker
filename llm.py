@@ -6,50 +6,103 @@ from dotenv import load_dotenv
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def generate_weekly_plan(profile):
+def generate_grocery_list_proposal(profile):
+    """
+    Step 1: Generates a list of suggested groceries with estimated costs
+    that strictly stay within the specified budget ceiling.
+    """
     diet = profile.get("dietary_type", "None")
     allergies = profile.get("allergies", "None")
     calories = profile.get("daily_calories_target", 2000)
     budget = profile.get("weekly_budget", 100.0)
 
     system_prompt = (
-        "You are an expert chef, certified nutritionist, and professional grocery planner. "
-        "Your task is to generate a personalized weekly meal plan (Monday through Sunday, 3 meals/day) "
-        "and a corresponding CONSOLIDATED grocery shopping list. "
-        "Your response MUST be a single, valid JSON object matching the requested schema exactly."
+        "You are an expert budget-focused meal planner and financial assistant. "
+        "Your goal is to suggest a list of grocery items with estimated costs that "
+        "allows the user to meet their calorie and dietary needs for 1 week. "
+        "Your response MUST be a single, valid JSON object matching the requested schema."
     )
 
     user_prompt = f"""
-    Please generate a 7-day meal plan and consolidated grocery list based on:
+    Please generate a proposed list of real-world groceries to buy for the week:
     - Diet Type: {diet}
     - Allergies/Restrictions: {allergies}
     - Target Daily Calories: {calories} kcal
-    - Total Weekly Budget: ${budget}
+    - MAXIMUM Weekly Budget Limit: ${budget}
     
-    CRITICAL RULE FOR THE GROCERY LIST:
-    When consolidating ingredients for the 'grocery_list', convert recipe measurements into standard grocery store purchasing units. 
-    - Do NOT output recipe units like '1/2 banana', '1/2 avocado', or '1 cup almond milk'. 
-    - Instead, consolidate them into real-world purchasing packages and units (e.g., '3 Bananas', '2 Avocados', '1 bottle of Almond Milk (1L)', '1 pack of Whole Wheat Pasta (500g)').
+    IMPORTANT RULES:
+    1. The sum of all 'estimated_cost' values MUST be strictly less than or equal to ${budget}. Do not exceed it.
+    2. Convert recipe fractions into real-world purchasing quantities (e.g., '1 bunch of Bananas', '1 carton of eggs (12)', '1 bag of Rice (1kg)').
+    3. Include a realistic estimated price (in USD) for each item based on average grocery store pricing.
     
-    You must output your response in this exact JSON format:
+    Output format:
+    {{
+      "grocery_list": [
+        {{"item_name": "1 carton Almond Milk (1L)", "estimated_cost": 3.49}},
+        {{"item_name": "1 bunch of Bananas", "estimated_cost": 1.99}},
+        {{"item_name": "1 carton of Eggs (12)", "estimated_cost": 4.29}}
+      ]
+    }}
+    Do not output any markdown formatting other than the raw JSON.
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.5
+        )
+        result = json.loads(response.choices[0].message.content)
+        return result.get("grocery_list", [])
+    except Exception as e:
+        print(f"Error suggesting groceries: {e}")
+        return []
+
+
+def generate_meals_from_groceries(profile, bought_groceries):
+    """
+    Step 2: Generates a weekly meal plan constrained strictly to
+    the list of bought groceries, plus simple pantry staples.
+    """
+    diet = profile.get("dietary_type", "None")
+    allergies = profile.get("allergies", "None")
+    calories = profile.get("daily_calories_target", 2000)
+
+    system_prompt = (
+        "You are a master creative chef and resource-constrained nutritionist. "
+        "Your task is to build a complete 7-day meal plan (Monday through Sunday, 3 meals/day) "
+        "using ONLY the specific groceries the user bought, plus basic pantry staples."
+    )
+
+    user_prompt = f"""
+    Please construct a 7-day meal plan based on these constraints:
+    - Diet Style: {diet}
+    - Allergies/Restrictions: {allergies}
+    - Target Daily Calories: {calories} kcal
+    - List of groceries I actually bought: {bought_groceries}
+    
+    STRICT MEAL COMPOSITION RULE:
+    You must construct the recipes using ONLY the items in the bought groceries list. 
+    You may assume the user has basic pantry staples on hand: water, salt, black pepper, and basic cooking oil (olive/vegetable).
+    No other unpurchased ingredients are allowed.
+    
+    Output format:
     {{
       "meals": [
         {{
           "day_of_week": "Monday",
           "meal_type": "Breakfast",
-          "meal_name": "Egg and Avocado Toast",
+          "meal_name": "Title of Meal",
           "calories": 450,
-          "ingredients": "1 slice whole wheat bread, 1 egg, 1/4 avocado"
+          "ingredients": "List of specifically used items from the bought list"
         }}
-      ],
-      "grocery_list": [
-        "1 carton Almond Milk (1L)",
-        "3 Bananas",
-        "2 Avocados",
-        "1 pack of Firm Tofu"
       ]
     }}
-    Do not include any other markdown formatting outside the raw JSON.
+    Do not output any introductory or closing text. Output ONLY raw JSON.
     """
 
     try:
@@ -62,13 +115,8 @@ def generate_weekly_plan(profile):
             ],
             temperature=0.7
         )
-        
         result = json.loads(response.choices[0].message.content)
-        return {
-            "meals": result.get("meals", []),
-            "grocery_list": result.get("grocery_list", [])
-        }
-        
+        return result.get("meals", [])
     except Exception as e:
-        print(f"Error calling OpenAI API: {e}")
-        return {"meals": [], "grocery_list": []}
+        print(f"Error generating constrained meals: {e}")
+        return []

@@ -3,6 +3,7 @@ import sqlite3
 DB_FILE = "meal_planner.db"
 
 def get_connection():
+    """Establishes a connection to the SQLite database."""
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
@@ -10,6 +11,8 @@ def get_connection():
 def init_db():
     conn = get_connection()
     cursor = conn.cursor()
+    
+    # SAFE: We only create tables if they do not exist. We do NOT drop them.
     
     # 1. User Profile Table
     cursor.execute("""
@@ -35,16 +38,17 @@ def init_db():
         )
     """)
     
-    # 3. Smart Grocery List Table (NEW)
+    # 3. Smart Grocery List Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS grocery_list (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             item_name TEXT NOT NULL,
+            estimated_cost REAL DEFAULT 0.0,
             is_bought INTEGER DEFAULT 0
         )
     """)
     
-    # 4. Deviations Table
+    # 4. Deviations Table (Used for recovery tracking)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS deviations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,6 +59,7 @@ def init_db():
         )
     """)
     
+    # Initialize default profile if empty
     cursor.execute("SELECT COUNT(*) FROM user_profile")
     if cursor.fetchone()[0] == 0:
         cursor.execute("""
@@ -122,7 +127,7 @@ def update_meal_status(meal_id, is_eaten):
     conn.commit()
     conn.close()
 
-# --- GROCERY LIST HELPERS (NEW) ---
+# --- GROCERY LIST HELPERS ---
 def clear_grocery_list():
     conn = get_connection()
     cursor = conn.cursor()
@@ -135,9 +140,9 @@ def save_grocery_list(items_list):
     cursor = conn.cursor()
     for item in items_list:
         cursor.execute("""
-            INSERT INTO grocery_list (item_name, is_bought)
-            VALUES (?, 0)
-        """, (item,))
+            INSERT INTO grocery_list (item_name, estimated_cost, is_bought)
+            VALUES (?, ?, 0)
+        """, (item['item_name'], item['estimated_cost']))
     conn.commit()
     conn.close()
 
@@ -155,6 +160,18 @@ def update_grocery_item_status(item_id, is_bought):
     cursor.execute("UPDATE grocery_list SET is_bought = ? WHERE id = ?", (is_bought, item_id))
     conn.commit()
     conn.close()
+
+def get_bought_groceries():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT item_name FROM grocery_list WHERE is_bought = 1")
+    rows = cursor.fetchall()
+    conn.close()
+    return [row['item_name'] for row in rows]
+
+def reset_all_data():
+    clear_meal_plan()
+    clear_grocery_list()
 
 if __name__ == "__main__":
     init_db()

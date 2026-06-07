@@ -1,6 +1,4 @@
-This technical documentation outlines the system architecture, database schema, and functions for the **Adaptive Meal & Grocery Planner**. You can use this documentation directly as a `README.md` for your GitHub portfolio or to explain the codebase to recruiters.
 
----
 
 # Technical Documentation: Adaptive Meal & Grocery Planner
 

@@ -80,8 +80,4 @@ The Streamlit frontend serves as the state controller, handling conditional rend
 
 ---
 
-## How This Project Proves Engineering Competence
-If asked about this project in an interview, you can highlight these specific points:
-1.  **Deterministic AI Output:** You controlled unstructured text models to return precise JSON schemas, directly parseable by SQLite without manual string manipulation.
-2.  **Constraint-Based Generation:** You solved the "hallucination" and "idealized planning" issues common in AI tools. Instead of letting the AI suggest arbitrary ingredients, the AI's recipe generator is strictly bound to a local SQLite inventory table.
-3.  **State Persistence:** You decoupled frontend UI changes from server processes by writing clean DB-wrapper states, ensuring user selections survive system refreshes.
+
